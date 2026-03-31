@@ -15,6 +15,7 @@ import { executeCode } from '../sandbox/executionManager.js';
 import { getExecution, listExecutions, deleteExecution, getStats } from '../sandbox/executionLogger.js';
 import { analyzeCode } from '../sandbox/staticAnalyzer.js';
 import { broadcastEvent } from '../websocket/handler.js';
+import { detectLanguage } from '../sandbox/languageDetector.js';
 
 const router = Router();
 
@@ -38,7 +39,7 @@ const upload = multer({
     files: 1
   },
   fileFilter: (req, file, cb) => {
-    const allowedExtensions = ['.py', '.js', '.sh', '.txt', '.bash'];
+    const allowedExtensions = ['.py', '.js', '.sh', '.bash', '.c', '.cpp', '.php', '.ps1', '.txt'];
     const ext = path.extname(file.originalname).toLowerCase();
     if (allowedExtensions.includes(ext)) {
       cb(null, true);
@@ -54,8 +55,14 @@ const extToLanguage = {
   '.js': 'javascript',
   '.sh': 'bash',
   '.bash': 'bash',
+  '.c': 'c',
+  '.cpp': 'cpp',
+  '.php': 'php',
+  '.ps1': 'powershell',
   '.txt': null // requires manual language selection
 };
+
+const ALLOWED_LANGUAGES = ['python', 'javascript', 'bash', 'c', 'cpp', 'php', 'powershell'];
 
 // ============================================================
 // POST /api/execute — Submit code for execution
@@ -68,15 +75,20 @@ router.post('/execute', async (req, res) => {
       return res.status(400).json({ error: 'Code is required' });
     }
 
-    if (!language || !['python', 'javascript', 'bash'].includes(language.toLowerCase())) {
-      return res.status(400).json({ error: 'Language must be one of: python, javascript, bash' });
+    let decodedLang = language;
+    if (!decodedLang || decodedLang === 'auto') {
+      decodedLang = detectLanguage(code.trim());
+    }
+
+    if (!decodedLang || !ALLOWED_LANGUAGES.includes(decodedLang.toLowerCase())) {
+      return res.status(400).json({ error: `Could not dynamically resolve a supported environment. Supported: ${ALLOWED_LANGUAGES.join(', ')}` });
     }
 
     // Execute through sandbox pipeline with WebSocket broadcasting
     const result = await executeCode(
       {
         code: code.trim(),
-        language: language.toLowerCase(),
+        language: decodedLang.toLowerCase(),
         inputMethod,
         inputSource,
         filename: null,
@@ -105,10 +117,15 @@ router.post('/execute/upload', upload.single('file'), async (req, res) => {
     }
 
     const ext = path.extname(req.file.originalname).toLowerCase();
-    let language = req.body.language || extToLanguage[ext];
+    const content = fs.readFileSync(req.file.path, 'utf8');
+    let language = req.body.language;
 
-    if (!language) {
-      return res.status(400).json({ error: 'Could not determine language. Please specify the language parameter.' });
+    if (!language || language === 'auto') {
+      language = extToLanguage[ext] || detectLanguage(content, req.file.originalname);
+    }
+
+    if (!language || !ALLOWED_LANGUAGES.includes(language.toLowerCase())) {
+      return res.status(400).json({ error: `Could not dynamically determine the environment for '${req.file.originalname}'.` });
     }
 
     // Read file contents
@@ -236,12 +253,15 @@ router.post('/execute/url', async (req, res) => {
       if (urlPath.endsWith('.py')) detectedLang = 'python';
       else if (urlPath.endsWith('.js')) detectedLang = 'javascript';
       else if (urlPath.endsWith('.sh') || urlPath.endsWith('.bash')) detectedLang = 'bash';
+      else if (urlPath.endsWith('.c')) detectedLang = 'c';
+      else if (urlPath.endsWith('.cpp')) detectedLang = 'cpp';
+      else if (urlPath.endsWith('.php')) detectedLang = 'php';
+      else if (urlPath.endsWith('.ps1')) detectedLang = 'powershell';
+      else detectedLang = detectLanguage(code, path.basename(urlPath));
     }
 
-    if (!detectedLang) {
-      return res.status(400).json({ 
-        error: 'Could not auto-detect language from URL. Please specify the language parameter.' 
-      });
+    if (!detectedLang || !ALLOWED_LANGUAGES.includes(detectedLang.toLowerCase())) {
+      return res.status(400).json({ error: `Detected language '${detectedLang}' is not supported. Supported: ${ALLOWED_LANGUAGES.join(', ')}` });
     }
 
     const result = await executeCode(
@@ -341,14 +361,23 @@ router.post('/execute/gist', async (req, res) => {
       
       // Try by language field from GitHub
       if (!detectedLang && selectedFile.language) {
-        const langMap = { 'Python': 'python', 'JavaScript': 'javascript', 'Shell': 'bash', 'Bash': 'bash' };
+        const langMap = { 
+          'Python': 'python', 
+          'JavaScript': 'javascript', 
+          'C': 'c',
+          'C++': 'cpp',
+          'PHP': 'php',
+          'PowerShell': 'powershell',
+          'Shell': 'bash', 
+          'Bash': 'bash' 
+        };
         detectedLang = langMap[selectedFile.language];
       }
     }
 
-    if (!detectedLang) {
+    if (!detectedLang || !ALLOWED_LANGUAGES.includes(detectedLang.toLowerCase())) {
       return res.status(400).json({
-        error: `Could not detect language for '${selectedFile.filename}'. Please specify the language parameter.`,
+        error: `Could not detect a supported language for '${selectedFile.filename}'. Supported: ${ALLOWED_LANGUAGES.join(', ')}`,
         availableFiles: Object.keys(files)
       });
     }

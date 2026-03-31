@@ -25,6 +25,7 @@ export default function History() {
   const [search, setSearch] = useState('');
   const [language, setLanguage] = useState('');
   const [verdict, setVerdict] = useState('');
+  const [deleteId, setDeleteId] = useState(null);
 
   useEffect(() => {
     loadExecutions();
@@ -49,15 +50,18 @@ export default function History() {
     }
   }
 
-  const handleDelete = async (id, e) => {
+  const requestDelete = (id, e) => {
     e.stopPropagation();
-    if (window.confirm('IRREVERSIBLE_ACTION: Are you certain you wish to purge this artifact from the central registry?')) {
-      try {
-        await deleteExecution(id);
-        loadExecutions();
-      } catch (err) {
-        alert('Action Failed: ' + err.message);
-      }
+    setDeleteId(id);
+  };
+
+  const confirmDelete = async () => {
+    try {
+      await deleteExecution(deleteId);
+      loadExecutions();
+      setDeleteId(null);
+    } catch (err) {
+      alert('Action Failed: ' + err.message);
     }
   };
 
@@ -93,6 +97,10 @@ export default function History() {
                 <option value="python">PYTHON</option>
                 <option value="javascript">NODE.JS</option>
                 <option value="bash">BASH</option>
+                <option value="c">C (GCC)</option>
+                <option value="cpp">C++ (G++)</option>
+                <option value="php">PHP 8.X</option>
+                <option value="powershell">POWERSHELL</option>
               </select>
             </div>
 
@@ -182,7 +190,7 @@ export default function History() {
                       <button className="btn btn-ghost" style={{ padding: '4px' }} title="View Intelligence Report">
                         <ExternalLink size={16} />
                       </button>
-                      <button className="btn btn-ghost" style={{ padding: '4px', color: 'var(--danger)' }} onClick={(e) => handleDelete(exec.id, e)} title="Purge Record">
+                      <button className="btn btn-ghost" style={{ padding: '4px', color: 'var(--danger)' }} onClick={(e) => requestDelete(exec.id, e)} title="Purge Record">
                         <Trash2 size={16} />
                       </button>
                     </div>
@@ -234,6 +242,48 @@ export default function History() {
         <Calendar size={14} />
         <span>Registry data persists locally on this node unless purged manually.</span>
       </div>
+
+      {/* Purge Confirmation Modal */}
+      {deleteId && (
+        <div className="modal-overlay" onClick={() => setDeleteId(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div 
+                style={{ 
+                  width: '32px', 
+                  height: '32px', 
+                  borderRadius: '50%', 
+                  backgroundColor: 'var(--danger-soft)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  color: 'var(--danger)'
+                }}
+              >
+                <ShieldAlert size={20} />
+              </div>
+              <div className="modal-title" style={{ color: 'var(--danger)' }}>CRITICAL_ACTION_REQUIRED</div>
+            </div>
+            <div className="modal-content">
+               <div style={{ color: 'var(--text-primary)', fontWeight: 700, marginBottom: '8px' }}>Confirm Permanent Purge</div>
+               <div style={{ color: 'var(--text-secondary)', fontSize: '13px', lineHeight: 1.6 }}>
+                  You are about to permanently remove this forensic artifact and all associated telemetries from the historical registry.
+                  <div style={{ marginTop: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
+                    Artifact Sequence: <span style={{ color: 'var(--accent-blue)', fontFamily: 'var(--font-mono)' }}>{deleteId.substring(0, 12)}...</span>
+                  </div>
+               </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setDeleteId(null)}>
+                ABORT_PURGE
+              </button>
+              <button className="btn btn-primary" style={{ backgroundColor: 'var(--danger)' }} onClick={confirmDelete}>
+                CONFIRM_PURGE
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

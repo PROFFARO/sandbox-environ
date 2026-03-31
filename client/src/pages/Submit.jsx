@@ -18,7 +18,7 @@ export default function Submit() {
   const navigate = useNavigate();
   const [method, setMethod] = useState('paste');
   const [code, setCode] = useState('');
-  const [language, setLanguage] = useState('python');
+  const [language, setLanguage] = useState('auto');
   const [url, setUrl] = useState('');
   const [gistUrl, setGistUrl] = useState('');
   const [file, setFile] = useState(null);
@@ -163,7 +163,7 @@ export default function Submit() {
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontWeight: 600 }}>{file ? file.name : 'Select malware artifact or script file'}</div>
                   <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                    Supported formats: .py, .js, .sh, .bash, .txt (max 100KB)
+                    Supported formats: .py, .js, .sh, .bash, .c, .cpp, .php, .ps1, .txt (max 100KB)
                   </div>
                 </div>
                 <input 
@@ -219,7 +219,7 @@ export default function Submit() {
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div>
+              <div style={{ display: 'none' }}>
                 <label className="nav-label" style={{ padding: 0 }}>Language Environment</label>
                 <select 
                   className="input" 
@@ -227,6 +227,7 @@ export default function Submit() {
                   onChange={(e) => setLanguage(e.target.value)}
                   style={{ marginTop: '4px' }}
                 >
+                  <option value="auto">Auto-Detect Artifact</option>
                   <option value="python">Python 3.x</option>
                   <option value="javascript">Node.js (LTS)</option>
                   <option value="bash">Restricted Bash</option>
@@ -248,9 +249,9 @@ export default function Submit() {
                       className="input" 
                       style={{ width: '60px', padding: '4px 8px', fontSize: '12px', textAlign: 'center' }}
                       value={timeout / 1000}
-                      onChange={(e) => setTimeoutVal(parseInt(e.target.value || 0) * 1000)}
+                      onChange={(e) => setTimeoutVal(e.target.value * 1000)}
                     />
-                    <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>SEC</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700 }}>SEC</span>
                   </div>
                 </div>
                 <input 
@@ -258,8 +259,7 @@ export default function Submit() {
                   min="1000" 
                   max="300000" 
                   step="1000"
-                  className="input"
-                  style={{ padding: 0, height: '4px', appearance: 'none', background: 'var(--bg-secondary)', cursor: 'pointer' }}
+                  className="slider" 
                   value={timeout}
                   onChange={(e) => setTimeoutVal(parseInt(e.target.value))}
                 />
@@ -271,40 +271,25 @@ export default function Submit() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <input 
                       type="number" 
-                      min="32" 
+                      min="64" 
                       max="1024" 
                       className="input" 
                       style={{ width: '60px', padding: '4px 8px', fontSize: '12px', textAlign: 'center' }}
                       value={memoryLimit}
-                      onChange={(e) => setMemoryLimit(parseInt(e.target.value || 0))}
+                      onChange={(e) => setMemoryLimit(parseInt(e.target.value))}
                     />
-                    <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>MB</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700 }}>MB</span>
                   </div>
                 </div>
                 <input 
                   type="range" 
-                  min="32" 
+                  min="64" 
                   max="1024" 
-                  step="16"
-                  className="input"
-                  style={{ padding: 0, height: '4px', appearance: 'none', background: 'var(--bg-secondary)', cursor: 'pointer' }}
+                  step="64"
+                  className="slider" 
                   value={memoryLimit}
                   onChange={(e) => setMemoryLimit(parseInt(e.target.value))}
                 />
-              </div>
-
-              <div style={{ 
-                padding: '12px', 
-                backgroundColor: 'var(--safe-soft)', 
-                borderRadius: '6px',
-                border: '1px solid var(--safe)',
-                fontSize: '11px',
-                color: 'var(--safe)',
-                display: 'flex',
-                gap: '8px'
-              }}>
-                <Shield size={14} style={{ flexShrink: 0 }} />
-                <span>Sandbox isolation is active for this configuration. Outbound network access restricted.</span>
               </div>
             </div>
           </div>
@@ -316,17 +301,16 @@ export default function Submit() {
             onClick={handleSubmit}
           >
             {loading ? (
-              <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div className="loading-spinner loading-spinner-sm" />
                 <span>ORCHESTRATING...</span>
-              </>
+              </div>
             ) : (
               <>
                 <Play size={18} fill="currentColor" />
                 <span>INITIATE ANALYSIS</span>
               </>
-            )
-          }
+            )}
           </button>
         </div>
       </div>
