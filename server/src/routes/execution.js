@@ -80,8 +80,8 @@ router.post('/execute', async (req, res) => {
         inputMethod,
         inputSource,
         filename: null,
-        timeoutMs: timeout ? Math.min(parseInt(timeout), 30000) : undefined,
-        memoryLimitMb: memoryLimit ? Math.min(parseInt(memoryLimit), 256) : undefined,
+        timeoutMs: timeout ? Math.min(parseInt(timeout), 300000) : undefined,
+        memoryLimitMb: memoryLimit ? Math.min(parseInt(memoryLimit), 1024) : undefined,
       },
       (event, data) => {
         broadcastEvent(event, data);
@@ -128,8 +128,8 @@ router.post('/execute/upload', upload.single('file'), async (req, res) => {
         inputMethod: 'file_upload',
         inputSource: req.file.originalname,
         filename: req.file.originalname,
-        timeoutMs: req.body.timeout ? Math.min(parseInt(req.body.timeout), 30000) : undefined,
-        memoryLimitMb: req.body.memoryLimit ? Math.min(parseInt(req.body.memoryLimit), 256) : undefined,
+        timeoutMs: req.body.timeout ? Math.min(parseInt(req.body.timeout), 300000) : undefined,
+        memoryLimitMb: req.body.memoryLimit ? Math.min(parseInt(req.body.memoryLimit), 1024) : undefined,
       },
       (event, data) => {
         broadcastEvent(event, data);
@@ -251,8 +251,8 @@ router.post('/execute/url', async (req, res) => {
         inputMethod: 'url_fetch',
         inputSource: url,
         filename: path.basename(parsedUrl.pathname) || 'remote-file',
-        timeoutMs: req.body.timeout ? Math.min(parseInt(req.body.timeout), 30000) : undefined,
-        memoryLimitMb: req.body.memoryLimit ? Math.min(parseInt(req.body.memoryLimit), 256) : undefined,
+        timeoutMs: req.body.timeout ? Math.min(parseInt(req.body.timeout), 300000) : undefined,
+        memoryLimitMb: req.body.memoryLimit ? Math.min(parseInt(req.body.memoryLimit), 1024) : undefined,
       },
       (event, data) => {
         broadcastEvent(event, data);
@@ -360,8 +360,8 @@ router.post('/execute/gist', async (req, res) => {
         inputMethod: 'gist_import',
         inputSource: gistUrl,
         filename: selectedFile.filename,
-        timeoutMs: req.body.timeout ? Math.min(parseInt(req.body.timeout), 30000) : undefined,
-        memoryLimitMb: req.body.memoryLimit ? Math.min(parseInt(req.body.memoryLimit), 256) : undefined,
+        timeoutMs: req.body.timeout ? Math.min(parseInt(req.body.timeout), 300000) : undefined,
+        memoryLimitMb: req.body.memoryLimit ? Math.min(parseInt(req.body.memoryLimit), 1024) : undefined,
       },
       (event, data) => {
         broadcastEvent(event, data);

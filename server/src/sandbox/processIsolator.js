@@ -156,15 +156,12 @@ function generateJavaScriptWrapper(codePath) {
 // Sandbox wrapper — restrict dangerous globals
 'use strict';
 
-// Store originals we need
 const _originalConsole = console;
 const _setTimeout = setTimeout;
 const _clearTimeout = clearTimeout;
 
-// Delete dangerous globals
 delete globalThis.fetch;
 
-// Restrict require
 const _blockedModules = new Set([
   'child_process', 'fs', 'fs/promises', 'net', 'http', 'https',
   'http2', 'dgram', 'dns', 'tls', 'cluster', 'worker_threads',
@@ -175,69 +172,36 @@ const _blockedModules = new Set([
   'sys', 'util', 'module'
 ]);
 
-// Override require
 const Module = require('module');
 const _origRequire = Module.prototype.require;
 Module.prototype.require = function(id) {
   if (_blockedModules.has(id)) {
-    throw new ReferenceError(\`SANDBOX VIOLATION: require('\${id}') is not allowed. Module '\${id}' is restricted.\`);
+    throw new ReferenceError(\`SANDBOX VIOLATION: require('\${id}') is not allowed.\`);
   }
   return _origRequire.call(this, id);
 };
 
-// Read and execute user code
 const _fs = _origRequire.call(module, 'fs');
 const userCode = _fs.readFileSync('${codePath.replace(/\\/g, '\\\\')}', 'utf8');
 
 try {
-  // Create restricted scope
   const _vm = _origRequire.call(module, 'vm');
   const sandbox = {
     console: _originalConsole,
-    setTimeout: (fn, ms) => _setTimeout(fn, Math.min(ms, 5000)),
+    setTimeout: (fn, ms) => _setTimeout(fn, Math.min(ms, 10000)),
     clearTimeout: _clearTimeout,
-    Math: Math,
-    Date: Date,
-    JSON: JSON,
-    parseInt: parseInt,
-    parseFloat: parseFloat,
-    isNaN: isNaN,
-    isFinite: isFinite,
-    encodeURI: encodeURI,
-    decodeURI: decodeURI,
-    encodeURIComponent: encodeURIComponent,
-    decodeURIComponent: decodeURIComponent,
-    Array: Array,
-    Object: Object,
-    String: String,
-    Number: Number,
-    Boolean: Boolean,
-    Symbol: Symbol,
-    Map: Map,
-    Set: Set,
-    WeakMap: WeakMap,
-    WeakSet: WeakSet,
-    Promise: Promise,
-    RegExp: RegExp,
-    Error: Error,
-    TypeError: TypeError,
-    RangeError: RangeError,
-    ReferenceError: ReferenceError,
-    SyntaxError: SyntaxError,
-    undefined: undefined,
-    NaN: NaN,
-    Infinity: Infinity,
+    Math, Date, JSON, parseInt, parseFloat, isNaN, isFinite,
+    Array, Object, String, Number, Boolean, Symbol, Map, Set,
+    Promise, RegExp, Error, TypeError, ReferenceError, SyntaxError,
+    Buffer: { alloc: Buffer.alloc, from: Buffer.from },
+    process: { uptime: () => 0, env: {} }
   };
 
   const context = _vm.createContext(sandbox);
-  const script = new _vm.Script(userCode, { filename: 'sandbox.js', timeout: 10000 });
-  script.runInContext(context, { timeout: 10000 });
+  const script = new _vm.Script(userCode, { filename: 'sandbox.js' });
+  script.runInContext(context, { timeout: 300000 });
 } catch (e) {
-  if (e.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') {
-    console.error('SANDBOX TIMEOUT: Script execution exceeded time limit.');
-  } else {
-    console.error(\`Error: \${e.constructor.name}: \${e.message}\`);
-  }
+  console.error(\`Error: \${e.constructor.name}: \${e.message}\`);
   process.exit(1);
 }
 `;
@@ -248,9 +212,10 @@ export class ProcessIsolator extends EventEmitter {
     super();
     this.executionId = options.executionId || uuidv4();
     this.language = options.language;
-    this.timeoutMs = options.timeoutMs || 10000;
-    this.memoryLimitMb = options.memoryLimitMb || 128;
-    this.maxOutputBytes = options.maxOutputBytes || 512 * 1024;
+    this.timeoutMs = options.timeoutMs || 300000;
+    this.memoryLimitMb = options.memoryLimitMb || 512;
+    this.maxOutputBytes = options.maxOutputBytes || 1024 * 1024;
+    this.timeline = [];
 
     this.process = null;
     this.resourceMonitor = null;
@@ -265,6 +230,17 @@ export class ProcessIsolator extends EventEmitter {
     this.tempDir = null;
     this.outputTruncated = false;
     this.violations = [];
+    this.behaviorEvents = [];
+  }
+
+  _addTimelineEvent(type, data) {
+    const event = {
+      timestamp: Date.now() - this.startTime,
+      type,
+      ...data
+    };
+    this.timeline.push(event);
+    this.emit('timeline', event);
   }
 
   /**
@@ -288,18 +264,35 @@ export class ProcessIsolator extends EventEmitter {
     const codeFilePath = path.join(this.tempDir, `usercode${config.extension}`);
     fs.writeFileSync(codeFilePath, code, 'utf8');
 
-    // Determine execution command
-    let command, args;
-
-    if (this.language === 'python') {
-      // Write wrapper
+    // Compilation phase for compiled languages
+    if (this.language === 'c' || this.language === 'cpp') {
+      const compiler = this.language === 'c' ? 'gcc' : 'g++';
+      this._addTimelineEvent('behavior', { category: 'Process', operation: 'compilation_start', description: `Compiling source with ${compiler}` });
+      
+      const binaryPath = path.join(this.tempDir, 'sandbox_app.exe');
+      try {
+        const { execSync } = await import('child_process');
+        execSync(`${compiler} "${codeFilePath}" -o "${binaryPath}"`, { stdio: 'pipe' });
+        command = binaryPath;
+        args = [];
+        this._addTimelineEvent('behavior', { category: 'Process', operation: 'compilation_success', description: 'Binary artifact created' });
+      } catch (err) {
+        return {
+          executionId: this.executionId,
+          stdout: '',
+          stderr: `Compilation Error:\n${err.stderr?.toString() || err.message}`,
+          exitCode: 1,
+          executionTimeMs: Date.now() - this.startTime,
+          timeline: this.timeline
+        };
+      }
+    } else if (this.language === 'python') {
       const wrapperCode = generatePythonWrapper(codeFilePath);
       const wrapperPath = path.join(this.tempDir, 'wrapper.py');
       fs.writeFileSync(wrapperPath, wrapperCode, 'utf8');
       command = await this._findCommand(config);
-      args = ['-u', wrapperPath]; // -u for unbuffered output
+      args = ['-u', wrapperPath];
     } else if (this.language === 'javascript') {
-      // Write wrapper
       const wrapperCode = generateJavaScriptWrapper(codeFilePath);
       const wrapperPath = path.join(this.tempDir, 'wrapper.js');
       fs.writeFileSync(wrapperPath, wrapperCode, 'utf8');
@@ -307,12 +300,18 @@ export class ProcessIsolator extends EventEmitter {
       args = [`--max-old-space-size=${this.memoryLimitMb}`, wrapperPath];
     } else if (this.language === 'bash') {
       command = await this._findCommand(config);
-      args = ['--restricted', codeFilePath]; // --restricted limits bash functionality
+      args = ['--restricted', codeFilePath];
+    } else if (this.language === 'php') {
+      command = 'php';
+      args = ['-d', 'disable_functions=exec,shell_exec,system,passthru,popen,proc_open', codeFilePath];
+    } else if (this.language === 'powershell') {
+      command = 'powershell.exe';
+      args = ['-ExecutionPolicy', 'Bypass', '-Command', `& { $ErrorActionPreference = 'Stop'; . '${codeFilePath}' }`];
     }
 
     return new Promise((resolve) => {
       this.startTime = Date.now();
-      this.emit('started', { executionId: this.executionId, command, language: this.language });
+      this._addTimelineEvent('behavior', { category: 'Process', operation: 'execution_start', description: `Initializing isolated environment for ${this.language}` });
 
       // Spawn process
       try {
@@ -366,6 +365,7 @@ export class ProcessIsolator extends EventEmitter {
 
       this.resourceMonitor.on('violation', (violation) => {
         this.violations.push(violation);
+        this._addTimelineEvent('violation', violation);
         this.emit('violation', { executionId: this.executionId, ...violation });
       });
 
@@ -453,6 +453,7 @@ export class ProcessIsolator extends EventEmitter {
           maxMemoryMb: resourceSummary.maxMemoryMb,
           maxCpuPercent: resourceSummary.maxCpuPercent,
           outputTruncated: this.outputTruncated,
+          timeline: this.timeline
         };
 
         this.emit('completed', result);

@@ -12,10 +12,10 @@ const POLICIES = {
     extension: '.py',
     command: 'python',
     alternativeCommands: ['python3', 'py'],
-    maxExecutionTimeMs: 10000,
-    maxMemoryMb: 128,
-    maxOutputBytes: 1024 * 512, // 512KB max output
-    maxCodeLength: 50000, // 50KB max code
+    maxExecutionTimeMs: 300000,
+    maxMemoryMb: 1024,
+    maxOutputBytes: 1024 * 1024, // 1MB max output
+    maxCodeLength: 100000, // 100KB max code
 
     allowedModules: [
       'math', 'random', 'string', 'datetime', 'time', 'json', 're',
@@ -100,10 +100,10 @@ const POLICIES = {
     extension: '.js',
     command: 'node',
     alternativeCommands: [],
-    maxExecutionTimeMs: 10000,
-    maxMemoryMb: 128,
-    maxOutputBytes: 1024 * 512,
-    maxCodeLength: 50000,
+    maxExecutionTimeMs: 300000,
+    maxMemoryMb: 1024,
+    maxOutputBytes: 1024 * 1024,
+    maxCodeLength: 100000,
 
     blockedModules: [
       { module: 'child_process', reason: 'Shell command execution' },
@@ -149,10 +149,10 @@ const POLICIES = {
     extension: '.sh',
     command: 'bash',
     alternativeCommands: ['sh'],
-    maxExecutionTimeMs: 5000, // Shorter timeout for shell
-    maxMemoryMb: 64,
-    maxOutputBytes: 1024 * 256, // 256KB
-    maxCodeLength: 10000,
+    maxExecutionTimeMs: 300000,
+    maxMemoryMb: 1024,
+    maxOutputBytes: 1024 * 1024 * 2, // 2MB
+    maxCodeLength: 100000,
 
     allowedCommands: [
       'echo', 'printf', 'test', 'expr', 'let', 'seq', 'wc',
@@ -197,30 +197,59 @@ const POLICIES = {
       { command: 'userdel', reason: 'User deletion' },
       { command: 'passwd', reason: 'Password changes' },
       { command: 'cat', reason: 'File reading (restricted)' },
-      { command: 'less', reason: 'File viewing' },
-      { command: 'more', reason: 'File viewing' },
-      { command: 'nano', reason: 'File editing' },
-      { command: 'vi', reason: 'File editing' },
-      { command: 'vim', reason: 'File editing' },
       { command: 'touch', reason: 'File creation' },
       { command: 'mkdir', reason: 'Directory creation' },
-      { command: 'ln', reason: 'Link creation' },
-      { command: 'tar', reason: 'Archive manipulation' },
-      { command: 'zip', reason: 'Archive creation' },
-      { command: 'unzip', reason: 'Archive extraction' },
-      { command: 'gzip', reason: 'Compression' },
-      { command: 'python', reason: 'Interpreter execution' },
-      { command: 'python3', reason: 'Interpreter execution' },
-      { command: 'node', reason: 'Interpreter execution' },
-      { command: 'perl', reason: 'Interpreter execution' },
-      { command: 'ruby', reason: 'Interpreter execution' },
-      { command: 'php', reason: 'Interpreter execution' },
-      { command: 'bash', reason: 'Shell spawning' },
-      { command: 'sh', reason: 'Shell spawning' },
-      { command: 'zsh', reason: 'Shell spawning' },
     ],
 
-    description: 'Bash scripts run with a severely restricted command set. Only text processing and arithmetic commands are allowed. No file I/O, network, or system commands.'
+    description: 'Bash scripts run with a severely restricted command set. No file system manipulation or unauthorized network access.'
+  },
+
+  c: {
+    name: 'C',
+    extension: '.c',
+    command: 'gcc',
+    alternativeCommands: [],
+    maxExecutionTimeMs: 300000,
+    maxMemoryMb: 1024,
+    maxOutputBytes: 1024 * 1024,
+    maxCodeLength: 100000,
+    description: 'C source is compiled with GCC and executed in a restricted environment.'
+  },
+
+  cpp: {
+    name: 'C++',
+    extension: '.cpp',
+    command: 'g++',
+    alternativeCommands: [],
+    maxExecutionTimeMs: 300000,
+    maxMemoryMb: 1024,
+    maxOutputBytes: 1024 * 1024,
+    maxCodeLength: 100000,
+    description: 'C++ source is compiled with G++ and executed in a restricted environment.'
+  },
+
+  php: {
+    name: 'PHP',
+    extension: '.php',
+    command: 'php',
+    alternativeCommands: [],
+    maxExecutionTimeMs: 300000,
+    maxMemoryMb: 1024,
+    maxOutputBytes: 1024 * 512,
+    maxCodeLength: 100000,
+    description: 'PHP scripts are executed using the PHP CLI with restricted configuration.'
+  },
+
+  powershell: {
+    name: 'PowerShell',
+    extension: '.ps1',
+    command: 'powershell',
+    alternativeCommands: ['pwsh'],
+    maxExecutionTimeMs: 300000,
+    maxMemoryMb: 1024,
+    maxOutputBytes: 1024 * 512,
+    maxCodeLength: 100000,
+    description: 'PowerShell scripts are executed in restricted mode.'
   }
 };
 

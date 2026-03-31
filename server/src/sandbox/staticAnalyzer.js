@@ -1,11 +1,10 @@
+import crypto from 'crypto';
+
 /**
  * Static Analyzer Module
  * 
  * Performs pre-execution static analysis on submitted code using pattern matching
  * and structural inspection. Returns a threat report with severity classifications.
- * 
- * Approach: WHITELIST-based analysis. We define what's dangerous rather than what's safe,
- * but we check for known dangerous patterns comprehensively.
  */
 
 const SEVERITY = {
@@ -173,112 +172,137 @@ const JAVASCRIPT_PATTERNS = [
 ];
 
 // ============================================================
-// BASH PATTERNS
+// C / C++ PATTERNS
 // ============================================================
-const BASH_PATTERNS = [
-  // --- CRITICAL: Destructive commands ---
-  { pattern: /\brm\s+(-[rRfiv]*\s+)*\//g, severity: SEVERITY.CRITICAL, category: CATEGORY.DESTRUCTIVE, description: 'rm on root path - Destructive file deletion' },
-  { pattern: /\brm\s+.*-[rR]f/g, severity: SEVERITY.CRITICAL, category: CATEGORY.DESTRUCTIVE, description: 'rm -rf - Recursive force deletion' },
-  { pattern: /\bdd\s+/g, severity: SEVERITY.CRITICAL, category: CATEGORY.DESTRUCTIVE, description: 'dd - Low-level disk write (destructive)' },
-  { pattern: /\bmkfs\b/g, severity: SEVERITY.CRITICAL, category: CATEGORY.DESTRUCTIVE, description: 'mkfs - Filesystem creation (destructive)' },
-  { pattern: /\bfdisk\b/g, severity: SEVERITY.CRITICAL, category: CATEGORY.DESTRUCTIVE, description: 'fdisk - Disk partitioning (destructive)' },
-  { pattern: /\bformat\b/g, severity: SEVERITY.DANGER, category: CATEGORY.DESTRUCTIVE, description: 'format - Disk formatting' },
-  { pattern: />\s*\/dev\/(sda|hda|nvme|disk)/g, severity: SEVERITY.CRITICAL, category: CATEGORY.DESTRUCTIVE, description: 'Write to disk device - Destructive' },
+const CPP_PATTERNS = [
+  { pattern: /\bsystem\s*\(/g, severity: SEVERITY.CRITICAL, category: CATEGORY.EXECUTION, description: 'system() - Direct command execution' },
+  { pattern: /\bpopen\s*\(/g, severity: SEVERITY.CRITICAL, category: CATEGORY.EXECUTION, description: 'popen() - Process execution with pipe' },
+  { pattern: /\bexecl|execv|execle|execve|execlp|execvp\b/g, severity: SEVERITY.CRITICAL, category: CATEGORY.EXECUTION, description: 'exec*() - Process replacement' },
+  { pattern: /\bfork\s*\(/g, severity: SEVERITY.CRITICAL, category: CATEGORY.PROCESS, description: 'fork() - Process forking' },
+  { pattern: /\bsocket\s*\(/g, severity: SEVERITY.CRITICAL, category: CATEGORY.NETWORK, description: 'socket() - Raw network access' },
+  { pattern: /\bconnect\s*\(/g, severity: SEVERITY.CRITICAL, category: CATEGORY.NETWORK, description: 'connect() - Outbound connection' },
+  { pattern: /#include\s+<(windows\.h|winsock2?\.h|unistd\.h|sys\/socket\.h|dlfcn\.h)>/g, severity: SEVERITY.WARNING, category: CATEGORY.SYSTEM, description: 'Inclusion of system/network headers' },
+  { pattern: /\bmount\s*\(/g, severity: SEVERITY.CRITICAL, category: CATEGORY.SYSTEM, description: 'mount() - Filesystem mounting' },
+  { pattern: /\bchroot\s*\(/g, severity: SEVERITY.CRITICAL, category: CATEGORY.SYSTEM, description: 'chroot() - Root directory change (sandbox escape)' },
+  { pattern: /\bmmap\s*\(/g, severity: SEVERITY.DANGER, category: CATEGORY.RESOURCE, description: 'mmap() - Manual memory mapping' },
+  { pattern: /\basm\b/g, severity: SEVERITY.CRITICAL, category: CATEGORY.EXECUTION, description: 'Inline assembly - Low-level manipulation' },
+];
 
-  // --- CRITICAL: Fork bomb / resource abuse ---
-  { pattern: /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;?\s*:/g, severity: SEVERITY.CRITICAL, category: CATEGORY.RESOURCE, description: 'Fork bomb detected :(){ :|:& };:' },
-  { pattern: /\bfork\s*\(\s*\)/g, severity: SEVERITY.CRITICAL, category: CATEGORY.RESOURCE, description: 'fork() - Process forking' },
-  { pattern: /\b(bash|sh|zsh)\s+-c\s+.*&\s*$/gm, severity: SEVERITY.DANGER, category: CATEGORY.PROCESS, description: 'Background shell execution' },
-  { pattern: /while\s+true\s*;?\s*do/g, severity: SEVERITY.WARNING, category: CATEGORY.RESOURCE, description: 'while true - Potential infinite loop' },
-  { pattern: /\byes\s*\|/g, severity: SEVERITY.WARNING, category: CATEGORY.RESOURCE, description: 'yes pipe - Infinite output stream' },
+// ============================================================
+// POWERSHELL PATTERNS
+// ============================================================
+const POWERSHELL_PATTERNS = [
+  { pattern: /Invoke-Expression|IEX/gi, severity: SEVERITY.CRITICAL, category: CATEGORY.EXECUTION, description: 'IEX - Dynamic command execution' },
+  { pattern: /Start-Process|saps/gi, severity: SEVERITY.CRITICAL, category: CATEGORY.EXECUTION, description: 'Start-Process - Process spawning' },
+  { pattern: /New-Object\s+System\.Net\.WebClient/gi, severity: SEVERITY.CRITICAL, category: CATEGORY.NETWORK, description: 'WebClient - Network download' },
+  { pattern: /Invoke-WebRequest|iwr|curl|wget/gi, severity: SEVERITY.CRITICAL, category: CATEGORY.NETWORK, description: 'Invoke-WebRequest - HTTP request' },
+  { pattern: /Get-WmiObject|gwmi|Get-CimInstance/gi, severity: SEVERITY.DANGER, category: CATEGORY.SYSTEM, description: 'WMI query - System enumeration' },
+  { pattern: /\[System\.Convert\]::FromBase64String/gi, severity: SEVERITY.DANGER, category: CATEGORY.EVASION, description: 'Base64 decoding - Potential obfuscation' },
+  { pattern: /-ExecutionPolicy\s+Bypass/gi, severity: SEVERITY.CRITICAL, category: CATEGORY.EVASION, description: 'Execution policy bypass' },
+  { pattern: /Add-Type\s+-TypeDefinition/gi, severity: SEVERITY.CRITICAL, category: CATEGORY.EXECUTION, description: 'Add-Type - Compilation of C# code' },
+];
 
-  // --- CRITICAL: Network access ---
-  { pattern: /\bcurl\s+/g, severity: SEVERITY.CRITICAL, category: CATEGORY.NETWORK, description: 'curl - HTTP request / download' },
-  { pattern: /\bwget\s+/g, severity: SEVERITY.CRITICAL, category: CATEGORY.NETWORK, description: 'wget - File download' },
-  { pattern: /\bnc\s+/g, severity: SEVERITY.CRITICAL, category: CATEGORY.NETWORK, description: 'netcat - Raw network connection' },
-  { pattern: /\bncat\s+/g, severity: SEVERITY.CRITICAL, category: CATEGORY.NETWORK, description: 'ncat - Network utility' },
-  { pattern: /\btelnet\s+/g, severity: SEVERITY.CRITICAL, category: CATEGORY.NETWORK, description: 'telnet - Network connection' },
-  { pattern: /\bssh\s+/g, severity: SEVERITY.CRITICAL, category: CATEGORY.NETWORK, description: 'ssh - Remote shell access' },
-  { pattern: /\bscp\s+/g, severity: SEVERITY.CRITICAL, category: CATEGORY.NETWORK, description: 'scp - Secure file copy' },
-  { pattern: /\brsync\s+/g, severity: SEVERITY.CRITICAL, category: CATEGORY.NETWORK, description: 'rsync - Remote file sync' },
-  { pattern: /\bftp\s+/g, severity: SEVERITY.CRITICAL, category: CATEGORY.NETWORK, description: 'ftp - File transfer protocol' },
-  { pattern: /\/dev\/tcp/g, severity: SEVERITY.CRITICAL, category: CATEGORY.NETWORK, description: '/dev/tcp - Bash network redirect' },
-  { pattern: /\/dev\/udp/g, severity: SEVERITY.CRITICAL, category: CATEGORY.NETWORK, description: '/dev/udp - Bash UDP redirect' },
-
-  // --- CRITICAL: File system access ---
-  { pattern: /\bcat\s+\/etc\/(passwd|shadow|sudoers|hosts)/g, severity: SEVERITY.CRITICAL, category: CATEGORY.FILE_ACCESS, description: 'Reading sensitive system files' },
-  { pattern: /\bcat\s+~?\/?\.?(ssh|gnupg|bash_history|bashrc|profile|aws|config)/g, severity: SEVERITY.CRITICAL, category: CATEGORY.DATA_EXFIL, description: 'Reading sensitive user files' },
-  { pattern: /\bchmod\s+(777|666|u\+s|g\+s|\+s)/g, severity: SEVERITY.CRITICAL, category: CATEGORY.PRIVILEGE_ESC, description: 'chmod dangerous permissions' },
-  { pattern: /\bchown\s+/g, severity: SEVERITY.DANGER, category: CATEGORY.PRIVILEGE_ESC, description: 'chown - Ownership change' },
-  { pattern: /\bmount\s+/g, severity: SEVERITY.CRITICAL, category: CATEGORY.SYSTEM, description: 'mount - Filesystem mounting' },
-  { pattern: /\bumount\s+/g, severity: SEVERITY.CRITICAL, category: CATEGORY.SYSTEM, description: 'umount - Filesystem unmounting' },
-
-  // --- CRITICAL: Privilege escalation ---
-  { pattern: /\bsudo\s+/g, severity: SEVERITY.CRITICAL, category: CATEGORY.PRIVILEGE_ESC, description: 'sudo - Privilege escalation' },
-  { pattern: /\bsu\s+/g, severity: SEVERITY.CRITICAL, category: CATEGORY.PRIVILEGE_ESC, description: 'su - User switching' },
-  { pattern: /\buseradd\b/g, severity: SEVERITY.CRITICAL, category: CATEGORY.PRIVILEGE_ESC, description: 'useradd - User creation' },
-  { pattern: /\buserdel\b/g, severity: SEVERITY.CRITICAL, category: CATEGORY.PRIVILEGE_ESC, description: 'userdel - User deletion' },
-  { pattern: /\bpasswd\b/g, severity: SEVERITY.CRITICAL, category: CATEGORY.PRIVILEGE_ESC, description: 'passwd - Password modification' },
-
-  // --- CRITICAL: Pipe to shell (download & execute) ---
-  { pattern: /\|\s*(bash|sh|zsh|ksh|csh)\b/g, severity: SEVERITY.CRITICAL, category: CATEGORY.EXECUTION, description: 'Pipe to shell - Download & execute attack' },
-  { pattern: /\bsource\s+/g, severity: SEVERITY.DANGER, category: CATEGORY.EXECUTION, description: 'source - Script execution in current shell' },
-  { pattern: /\b\.\s+\//g, severity: SEVERITY.DANGER, category: CATEGORY.EXECUTION, description: 'Dot-source execution' },
-
-  // --- System information ---
-  { pattern: /\buname\s+/g, severity: SEVERITY.WARNING, category: CATEGORY.SYSTEM, description: 'uname - System information gathering' },
-  { pattern: /\bwhoami\b/g, severity: SEVERITY.WARNING, category: CATEGORY.SYSTEM, description: 'whoami - Current user identification' },
-  { pattern: /\bid\b/g, severity: SEVERITY.INFO, category: CATEGORY.SYSTEM, description: 'id - User/group identification' },
-  { pattern: /\bhostname\b/g, severity: SEVERITY.WARNING, category: CATEGORY.SYSTEM, description: 'hostname - System identification' },
-  { pattern: /\bifconfig\b/g, severity: SEVERITY.WARNING, category: CATEGORY.SYSTEM, description: 'ifconfig - Network interface info' },
-  { pattern: /\bip\s+(addr|link|route)\b/g, severity: SEVERITY.WARNING, category: CATEGORY.SYSTEM, description: 'ip - Network configuration' },
-  { pattern: /\bps\s+/g, severity: SEVERITY.WARNING, category: CATEGORY.SYSTEM, description: 'ps - Process listing' },
-  { pattern: /\bnetstat\s+/g, severity: SEVERITY.WARNING, category: CATEGORY.SYSTEM, description: 'netstat - Network statistics' },
-
-  // --- Persistence ---
-  { pattern: /\bcrontab\s+/g, severity: SEVERITY.CRITICAL, category: CATEGORY.PERSISTENCE, description: 'crontab - Scheduled task creation' },
-  { pattern: /\/etc\/cron/g, severity: SEVERITY.CRITICAL, category: CATEGORY.PERSISTENCE, description: 'cron directory - Scheduled task persistence' },
-  { pattern: /\bsystemctl\s+(enable|start)/g, severity: SEVERITY.CRITICAL, category: CATEGORY.PERSISTENCE, description: 'systemctl - Service persistence' },
-  { pattern: /\.bashrc|\.profile|\.bash_profile/g, severity: SEVERITY.DANGER, category: CATEGORY.PERSISTENCE, description: 'Shell profile modification - Login persistence' },
-
-  // --- Kill / process manipulation ---
-  { pattern: /\bkill\s+/g, severity: SEVERITY.DANGER, category: CATEGORY.PROCESS, description: 'kill - Process termination' },
-  { pattern: /\bkillall\s+/g, severity: SEVERITY.CRITICAL, category: CATEGORY.PROCESS, description: 'killall - Mass process termination' },
-  { pattern: /\bpkill\s+/g, severity: SEVERITY.CRITICAL, category: CATEGORY.PROCESS, description: 'pkill - Pattern-based process kill' },
-
-  // --- Evasion ---
-  { pattern: /\bhistory\s*-c/g, severity: SEVERITY.DANGER, category: CATEGORY.EVASION, description: 'history -c - Command history clearing' },
-  { pattern: /\bunset\s+HISTFILE/g, severity: SEVERITY.DANGER, category: CATEGORY.EVASION, description: 'Disabling command history' },
-  { pattern: /\/dev\/null\s*2>&1/g, severity: SEVERITY.WARNING, category: CATEGORY.EVASION, description: 'Output redirection to null - Hiding output' },
+// ============================================================
+// PHP PATTERNS
+// ============================================================
+const PHP_PATTERNS = [
+  { pattern: /\b(exec|shell_exec|system|passthru|popen|proc_open)\s*\(/g, severity: SEVERITY.CRITICAL, category: CATEGORY.EXECUTION, description: 'Dangerous system call' },
+  { pattern: /\beval\s*\(/g, severity: SEVERITY.CRITICAL, category: CATEGORY.EXECUTION, description: 'eval() - Dynamic code execution' },
+  { pattern: /\b(assert|create_function)\s*\(/g, severity: SEVERITY.DANGER, category: CATEGORY.EXECUTION, description: 'Risky dynamic evaluation' },
+  { pattern: /\b(include|require)(_once)?\s*\(/g, severity: SEVERITY.DANGER, category: CATEGORY.FILE_ACCESS, description: 'Dynamic file inclusion' },
+  { pattern: /\bbase64_decode\s*\(/g, severity: SEVERITY.DANGER, category: CATEGORY.EVASION, description: 'base64_decode - Potential obfuscation' },
+  { pattern: /\b(file_get_contents|fopen|readfile)\s*\(/g, severity: SEVERITY.WARNING, category: CATEGORY.FILE_ACCESS, description: 'File system access' },
+  { pattern: /\b(curl_init|fsockopen|pfsockopen)\s*\(/g, severity: SEVERITY.CRITICAL, category: CATEGORY.NETWORK, description: 'Network connection' },
 ];
 
 /**
+ * Calculate Shannon Entropy of a string/buffer
+ */
+function calculateEntropy(data) {
+  if (!data || data.length === 0) return 0;
+  const len = data.length;
+  const frequencies = {};
+  for (let i = 0; i < len; i++) {
+    const char = data[i];
+    frequencies[char] = (frequencies[char] || 0) + 1;
+  }
+  let entropy = 0;
+  for (const char in frequencies) {
+    const p = frequencies[char] / len;
+    entropy -= p * Math.log2(p);
+  }
+  return entropy;
+}
+
+/**
+ * Detect file type from magic bytes
+ */
+function detectFileType(buffer) {
+  if (buffer.length < 4) return 'unknown';
+  
+  const magic = buffer.toString('hex', 0, 4).toUpperCase();
+  
+  if (magic.startsWith('4D5A')) return 'PE Executable (.exe, .dll)';
+  if (magic === '7F454C46') return 'ELF Executable (Linux)';
+  if (magic === '89504E47') return 'PNG Image';
+  if (magic.startsWith('FFD8FF')) return 'JPEG Image';
+  if (magic === '25504446') return 'PDF Document';
+  if (magic === '504B0304') return 'ZIP Archive / Office Doc';
+  if (magic === '7B5C7274') return 'RTF Document';
+  if (magic === '23212F62') return 'Bash/Shell Script';
+  if (magic === '3C3F7068') return 'PHP Script';
+  
+  return 'Text/Source Code';
+}
+
+/**
+ * MITRE ATT&CK Mapping Simulation
+ */
+const MITRE_MAPPING = {
+  [CATEGORY.EXECUTION]: { id: 'T1059', name: 'Command and Scripting Interpreter' },
+  [CATEGORY.PERSISTENCE]: { id: 'T1547', name: 'Boot or Logon Autostart Execution' },
+  [CATEGORY.PRIVILEGE_ESC]: { id: 'T1068', name: 'Exploitation for Privilege Escalation' },
+  [CATEGORY.EVASION]: { id: 'T1027', name: 'Obfuscated Files or Information' },
+  [CATEGORY.NETWORK]: { id: 'T1071', name: 'Application Layer Protocol' },
+  [CATEGORY.DATA_EXFIL]: { id: 'T1041', name: 'Exfiltration Over C2 Channel' },
+  [CATEGORY.FILE_ACCESS]: { id: 'T1083', name: 'File and Directory Discovery' },
+  [CATEGORY.SYSTEM]: { id: 'T1082', name: 'System Information Discovery' },
+};
+
+/**
  * Analyze code for security threats
- * @param {string} code - The source code to analyze
- * @param {string} language - The programming language (python, javascript, bash)
- * @returns {Object} Analysis result with findings, overall severity, and threat score
  */
 export function analyzeCode(code, language) {
   const startTime = Date.now();
+  const buffer = Buffer.from(code);
+  
+  // Forensic Metadata
+  const hashes = {
+    md5: crypto.createHash('md5').update(buffer).digest('hex'),
+    sha1: crypto.createHash('sha1').update(buffer).digest('hex'),
+    sha256: crypto.createHash('sha256').update(buffer).digest('hex'),
+  };
+  
+  const entropy = calculateEntropy(code);
+  const fileType = detectFileType(buffer);
+  
   let patterns;
 
   switch (language.toLowerCase()) {
-    case 'python':
-      patterns = PYTHON_PATTERNS;
-      break;
-    case 'javascript':
-      patterns = JAVASCRIPT_PATTERNS;
-      break;
-    case 'bash':
-      patterns = BASH_PATTERNS;
-      break;
+    case 'python': patterns = PYTHON_PATTERNS; break;
+    case 'javascript': patterns = JAVASCRIPT_PATTERNS; break;
+    case 'bash': patterns = BASH_PATTERNS; break;
+    case 'cpp': case 'c': patterns = CPP_PATTERNS; break;
+    case 'powershell': patterns = POWERSHELL_PATTERNS; break;
+    case 'php': patterns = PHP_PATTERNS; break;
     default:
       return {
         language,
+        forensics: { hashes, entropy, fileType },
         findings: [],
         overallSeverity: SEVERITY.WARNING,
-        threatScore: 10,
-        summary: `Unknown language: ${language}. Cannot perform static analysis.`,
+        threatScore: 0,
+        summary: `Generic analysis for ${language}. High-fidelity heuristics only available for primary targets.`,
         analysisTimeMs: Date.now() - startTime,
         blocked: false
       };
@@ -292,12 +316,15 @@ export function analyzeCode(code, language) {
     rule.pattern.lastIndex = 0;
     const matches = code.match(rule.pattern);
     if (matches) {
+      const mitre = MITRE_MAPPING[rule.category] || null;
+      
       findings.push({
         severity: rule.severity,
         category: rule.category,
         description: rule.description,
         matchCount: matches.length,
-        matches: matches.slice(0, 5).map(m => m.trim()) // cap displayed matches
+        matches: matches.slice(0, 5).map(m => m.trim()),
+        mitre
       });
 
       categoryCounts[rule.category] = (categoryCounts[rule.category] || 0) + matches.length;
@@ -328,7 +355,8 @@ export function analyzeCode(code, language) {
   else if (findings.some(f => f.severity === SEVERITY.INFO)) overallSeverity = SEVERITY.INFO;
 
   // Determine if should be blocked
-  const blocked = overallSeverity === SEVERITY.CRITICAL;
+  // ONLY block if user tries specific catastrophic things, but allow analysis usually
+  const blocked = threatScore >= 95;
 
   // Generate summary
   const criticalCount = findings.filter(f => f.severity === SEVERITY.CRITICAL).length;
@@ -339,13 +367,14 @@ export function analyzeCode(code, language) {
   if (findings.length === 0) {
     summary = 'No security threats detected. Code appears safe for execution.';
   } else if (blocked) {
-    summary = `BLOCKED: ${criticalCount} critical threat(s) detected. Execution denied.`;
+    summary = `CRITICAL THREAT: ${criticalCount} critical violation(s) detected. Integrity risk high.`;
   } else {
-    summary = `${findings.length} potential issue(s) found: ${criticalCount} critical, ${dangerCount} dangerous, ${warningCount} warnings.`;
+    summary = `${findings.length} findings: ${criticalCount} critical, ${dangerCount} dangerous. MITRE mapping complete.`;
   }
 
   return {
     language,
+    forensics: { hashes, entropy: entropy.toFixed(4), fileType },
     findings: findings.sort((a, b) => {
       const order = { critical: 0, danger: 1, warning: 2, info: 3, safe: 4 };
       return (order[a.severity] || 5) - (order[b.severity] || 5);

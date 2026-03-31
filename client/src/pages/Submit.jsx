@@ -230,6 +230,10 @@ export default function Submit() {
                   <option value="python">Python 3.x</option>
                   <option value="javascript">Node.js (LTS)</option>
                   <option value="bash">Restricted Bash</option>
+                  <option value="c">C (GCC Compiler)</option>
+                  <option value="cpp">C++ (G++ Compiler)</option>
+                  <option value="php">PHP 8.x</option>
+                  <option value="powershell">PowerShell 7.x</option>
                 </select>
               </div>
 
@@ -240,7 +244,7 @@ export default function Submit() {
                     <input 
                       type="number" 
                       min="1" 
-                      max="30" 
+                      max="300" 
                       className="input" 
                       style={{ width: '60px', padding: '4px 8px', fontSize: '12px', textAlign: 'center' }}
                       value={timeout / 1000}
@@ -252,7 +256,7 @@ export default function Submit() {
                 <input 
                   type="range" 
                   min="1000" 
-                  max="30000" 
+                  max="300000" 
                   step="1000"
                   className="input"
                   style={{ padding: 0, height: '4px', appearance: 'none', background: 'var(--bg-secondary)', cursor: 'pointer' }}
@@ -268,7 +272,7 @@ export default function Submit() {
                     <input 
                       type="number" 
                       min="32" 
-                      max="256" 
+                      max="1024" 
                       className="input" 
                       style={{ width: '60px', padding: '4px 8px', fontSize: '12px', textAlign: 'center' }}
                       value={memoryLimit}
@@ -280,7 +284,7 @@ export default function Submit() {
                 <input 
                   type="range" 
                   min="32" 
-                  max="256" 
+                  max="1024" 
                   step="16"
                   className="input"
                   style={{ padding: 0, height: '4px', appearance: 'none', background: 'var(--bg-secondary)', cursor: 'pointer' }}
