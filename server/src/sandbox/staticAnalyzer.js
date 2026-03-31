@@ -203,6 +203,22 @@ const POWERSHELL_PATTERNS = [
 ];
 
 // ============================================================
+// BASH / SHELL PATTERNS
+// ============================================================
+const BASH_PATTERNS = [
+  { pattern: /\b(nc|netcat|ncat|telnet)\b/g, severity: SEVERITY.CRITICAL, category: CATEGORY.NETWORK, description: 'Network utility - Raw socket manipulation' },
+  { pattern: /\b(curl|wget|fetch)\b/g, severity: SEVERITY.CRITICAL, category: CATEGORY.NETWORK, description: 'HTTP client - Data exfiltration or payload download' },
+  { pattern: /\brm\s+-[rf]{1,2}/g, severity: SEVERITY.CRITICAL, category: CATEGORY.DESTRUCTIVE, description: 'Recursive deletion - Massive data loss risk' },
+  { pattern: /\bchmod\s+([0-7]{3}|[+-][rwx])\b/g, severity: SEVERITY.DANGER, category: CATEGORY.SYSTEM, description: 'Permission modification - Privilege escalation risk' },
+  { pattern: /\bchown\b/g, severity: SEVERITY.DANGER, category: CATEGORY.SYSTEM, description: 'Ownership change - Privilege escalation risk' },
+  { pattern: /\bsudo|su\s+-/g, severity: SEVERITY.CRITICAL, category: CATEGORY.PRIVILEGE_ESC, description: 'Privilege escalation attempt' },
+  { pattern: />\s*\/etc\/(passwd|shadow|crontab|hosts)/g, severity: SEVERITY.CRITICAL, category: CATEGORY.PERSISTENCE, description: 'Modification of critical system files' },
+  { pattern: /\beval\s+/g, severity: SEVERITY.CRITICAL, category: CATEGORY.EXECUTION, description: 'eval - Dynamic command execution' },
+  { pattern: /\/dev\/(tcp|udp)\//g, severity: SEVERITY.CRITICAL, category: CATEGORY.NETWORK, description: 'Bash raw socket access - Data exfiltration' },
+  { pattern: /\b(base64|openssl\s+enc)\b/g, severity: SEVERITY.DANGER, category: CATEGORY.EVASION, description: 'Encoding utility - Potential obfuscation' },
+];
+
+// ============================================================
 // PHP PATTERNS
 // ============================================================
 const PHP_PATTERNS = [

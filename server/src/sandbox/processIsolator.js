@@ -264,6 +264,9 @@ export class ProcessIsolator extends EventEmitter {
     const codeFilePath = path.join(this.tempDir, `usercode${config.extension}`);
     fs.writeFileSync(codeFilePath, code, 'utf8');
 
+    let command;
+    let args;
+
     // Compilation phase for compiled languages
     if (this.language === 'c' || this.language === 'cpp') {
       const compiler = this.language === 'c' ? 'gcc' : 'g++';
