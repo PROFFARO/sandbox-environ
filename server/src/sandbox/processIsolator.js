@@ -352,13 +352,15 @@ export class ProcessIsolator extends EventEmitter {
         return;
       }
 
-      // Start resource monitoring
+      // Start resource monitoring with high resolution for telemetry
       this.resourceMonitor = new ResourceMonitor({
         memoryLimitMb: this.memoryLimitMb,
-        pollIntervalMs: 200,
+        pollIntervalMs: 50, // 50ms for granular forensics
       });
 
       this.resourceMonitor.on('resource', (sample) => {
+        // Log telemetry event for timeline
+        this._addTimelineEvent('resource', sample);
         this.emit('resource', { executionId: this.executionId, ...sample });
       });
 
