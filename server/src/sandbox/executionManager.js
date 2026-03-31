@@ -226,8 +226,10 @@ export async function executeCode(params, onEvent = null) {
       });
     });
 
+    const runtimeViolations = [];
     isolator.on('violation', (violation) => {
       emit('execution:violation', violation);
+      runtimeViolations.push(violation);
       storeViolation(executionId, violation);
     });
 
@@ -264,6 +266,12 @@ export async function executeCode(params, onEvent = null) {
     // Store resource samples
     storeResourceSamples(executionId, execResult.resourceSamples);
 
+    // Collect all violations for the final report
+    const allViolations = [
+      ...(staticResult.findings || []),
+      ...(runtimeViolations || [])
+    ];
+
     // Complete execution record
     completeExecution(executionId, {
       stdout: execResult.stdout,
@@ -279,7 +287,7 @@ export async function executeCode(params, onEvent = null) {
       verdict: threatResult.verdict,
       threatBreakdown: threatResult.categoryScores,
       behaviors: threatResult.behaviors,
-      violations: [],
+      violations: allViolations,
     });
 
     emit('execution:completed', {

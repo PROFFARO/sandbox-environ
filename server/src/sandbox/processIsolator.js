@@ -264,6 +264,7 @@ export class ProcessIsolator extends EventEmitter {
     this.killReason = null;
     this.tempDir = null;
     this.outputTruncated = false;
+    this.violations = [];
   }
 
   /**
@@ -363,6 +364,11 @@ export class ProcessIsolator extends EventEmitter {
         this.emit('warning', { executionId: this.executionId, ...warning });
       });
 
+      this.resourceMonitor.on('violation', (violation) => {
+        this.violations.push(violation);
+        this.emit('violation', { executionId: this.executionId, ...violation });
+      });
+
       this.resourceMonitor.on('kill', (reason) => {
         if (!this.killed) {
           this.killed = true;
@@ -413,7 +419,10 @@ export class ProcessIsolator extends EventEmitter {
         this.exitCode = code;
         this.signal = signal;
 
-        if (signal === 'SIGTERM' && !this.killReason) {
+        // Only mark as timeout if execution time actually exceeded the limit
+        // On Windows, spawn's timeout sends SIGTERM which we need to distinguish from clean exits
+        const executionTime = this.endTime - this.startTime;
+        if (signal === 'SIGTERM' && !this.killReason && executionTime >= this.timeoutMs * 0.9) {
           this.killed = true;
           this.killReason = 'timeout';
           this.emit('violation', {
